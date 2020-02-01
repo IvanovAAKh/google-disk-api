@@ -12,6 +12,7 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
+import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
 
 import java.io.*;
@@ -25,42 +26,89 @@ public class GoogleDiskService {
   // Global instance of the scopes required by this quickstart. If modifying these
   // scopes, delete your previously saved credentials/ folder.
   private static final List<String> SCOPES = Collections.singletonList(DriveScopes.DRIVE);
-  private String googleClientSecretFilePath;
-  private String googleCredentialsFolder;
+  private Drive googleDiskAPI;
 
-  public GoogleDiskService(String googleClientSecretFilePath, String googleCredentialsFolder) {
-    this.googleClientSecretFilePath = googleClientSecretFilePath;
-    this.googleCredentialsFolder = googleCredentialsFolder;
+  GoogleDiskService(String googleClientSecretFilePath, String googleCredentialsFolder) {
+    this.googleDiskAPI = this.getGoogleDiskAPI(googleClientSecretFilePath, googleCredentialsFolder);
   }
 
-  public void showFiles() {
-    Drive googleDiskAPI = this.getGoogleDiskAPI();
+  public static void main(String ...args) {
+    GoogleDiskService googleDiskService = new GoogleDiskService(
+      "D:/projects/My/google_client_secret.json",
+      "D:/projects/My"
+      );
 
-    // Print the names and IDs for up to 10 files.
-    FileList result;
-    try {
-      result = googleDiskAPI
-        .files()
-        .list()
-        .setFields("nextPageToken, files(id, name)")
-        .execute();
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Can't get list of Google files");
+    System.out.println(googleDiskService.getFileOutputStream("7 kurs/test_folder/test1.txt"));
+  }
+
+  // Remember that in Google Disk folder - is also file
+  private String getFileId(String parentFolderId, String fileName, boolean isFolder) {
+    StringBuilder fileSearchQueryBuilder = new StringBuilder();
+    fileSearchQueryBuilder.append("name = '").append(fileName).append("'");
+    fileSearchQueryBuilder.append(" and '").append(parentFolderId).append("' in parents");
+    if (isFolder) {
+      fileSearchQueryBuilder.append(" and mimeType = 'application/vnd.google-apps.folder'");
+    } else {
+      fileSearchQueryBuilder.append(" and mimeType != 'application/vnd.google-apps.folder'");
     }
 
-    List<com.google.api.services.drive.model.File> files = result.getFiles();
+    String pageToken = null;
+    String foundFileId = null;
+    try {
+      do {
+        FileList result = this.googleDiskAPI
+          .files()
+          .list()
+          .setQ(fileSearchQueryBuilder.toString())
+          .setSpaces("drive")
+          .setFields("nextPageToken, files(id)")
+          .setPageToken(pageToken)
+          .execute();
 
-    if (files == null || files.isEmpty()) {
-      System.out.println("No files found.");
-    } else {
-      System.out.println("Files:");
-      for (com.google.api.services.drive.model.File file : files) {
-        System.out.printf("%s (%s)\n", file.getName(), file.getId());
+        List<File> foundFiles = result.getFiles();
+        if (foundFiles.size() > 1) {
+          throw new IllegalArgumentException("Google Disk can't have duplicated name in folder");
+        }
+
+        if (foundFiles.size() > 0) {
+          foundFileId = foundFiles.get(0).getId();
+        }
+        pageToken = result.getNextPageToken();
+      } while (pageToken != null && foundFileId == null);
+    } catch (Exception ex) {
+      throw new IllegalArgumentException("Error on fetch files from Google Disk", ex);
+    }
+
+    return foundFileId;
+  }
+
+  public OutputStream getFileOutputStream(String path) {
+    String[] filePathItems = path.split("/");
+    String currentParentFolderId = "root";
+    String foundFileId = null;
+
+    for (int i = 0; i < filePathItems.length; i++) {
+      boolean isFileName = i == filePathItems.length - 1;
+      if (isFileName) {
+        foundFileId = getFileId(currentParentFolderId, filePathItems[i], false);
+      } else {
+        currentParentFolderId = getFileId(currentParentFolderId, filePathItems[i], true);
       }
     }
+
+    OutputStream outputStream = new ByteArrayOutputStream();
+    if (foundFileId != null) {
+      try {
+        googleDiskAPI.files().get(foundFileId).executeMediaAndDownloadTo(outputStream);
+      } catch (Exception ex) {
+        throw new IllegalArgumentException("Can't get file by its id '" + foundFileId + "'", ex);
+      }
+    }
+
+    return outputStream;
   }
 
-  private Drive getGoogleDiskAPI() {
+  private Drive getGoogleDiskAPI(String googleClientSecretFilePath, String googleCredentialsFolder) {
     NetHttpTransport netHttpTransport;
     try {
       netHttpTransport = GoogleNetHttpTransport.newTrustedTransport();
@@ -68,15 +116,15 @@ public class GoogleDiskService {
       throw new IllegalArgumentException("Can't get GoogleNetHttpTransport");
     }
 
-    Credential credential = getCredentials(netHttpTransport);
+    Credential credential = getCredentials(netHttpTransport, googleClientSecretFilePath, googleCredentialsFolder);
 
     return new Drive.Builder(netHttpTransport, JSON_FACTORY, credential)
       .setApplicationName(APPLICATION_NAME)
       .build();
   }
 
-  private Credential getCredentials(NetHttpTransport netHttpTransport) {
-    File clientSecretFile = new File(this.googleClientSecretFilePath);
+  private Credential getCredentials(NetHttpTransport netHttpTransport, String googleClientSecretFilePath, String googleCredentialsFolder) {
+    java.io.File clientSecretFile = new java.io.File(googleClientSecretFilePath);
 
     // Load client secrets.
     InputStream clientSecretFileInputStream;
@@ -93,7 +141,7 @@ public class GoogleDiskService {
       throw new IllegalArgumentException("Can't get clientSecrets");
     }
 
-    File clientCredentialsFolder = new File(this.googleCredentialsFolder);
+    java.io.File clientCredentialsFolder = new java.io.File(googleCredentialsFolder);
     // Build flow and trigger user authorization request.
     GoogleAuthorizationCodeFlow googleAuthorizationCodeFlow;
     try {
