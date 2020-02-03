@@ -6,6 +6,8 @@ import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.AbstractInputStreamContent;
+import com.google.api.client.http.InputStreamContent;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
@@ -39,6 +41,11 @@ public class GoogleDiskService {
       );
 
     System.out.println(googleDiskService.getFileOutputStream("7 kurs/test_folder/test1.txt"));
+
+    ByteArrayOutputStream baos = googleDiskService.getFileOutputStream("7 kurs/test_folder/test1.txt");
+
+    InputStream inputStream = new ByteArrayInputStream(baos.toByteArray());
+    googleDiskService.uploadFile("myAutoCreatedFolder/1/2/test1.txt", inputStream);
   }
 
   // Remember that in Google Disk folder - is also file
@@ -82,7 +89,118 @@ public class GoogleDiskService {
     return foundFileId;
   }
 
-  public OutputStream getFileOutputStream(String path) {
+  private boolean isFoldersPathExists(String path) {
+    String[] pathFolders = path.split("/");
+
+    String currentParentFolderId = "root";
+    for(String pathFolderName : pathFolders) {
+      String foundFolderId = getFileId(currentParentFolderId, pathFolderName, true);
+      if (foundFolderId == null) {
+        return false;
+      }
+      currentParentFolderId = foundFolderId;
+    }
+
+    return true;
+  }
+
+  private File createFolder(String parentFolderId, String folderName) {
+    File fileMetadata = new File();
+
+    fileMetadata.setName(folderName);
+    fileMetadata.setMimeType("application/vnd.google-apps.folder");
+
+    if (parentFolderId != null) {
+      List<String> parents = Collections.singletonList(parentFolderId);
+      fileMetadata.setParents(parents);
+    }
+
+    File createdFolder = null;
+    try {
+      createdFolder = this.googleDiskAPI
+        .files()
+        .create(fileMetadata)
+        .setFields("id, name")
+        .execute();
+    } catch (IOException ex) {
+      throw new IllegalArgumentException("Can't create folder '" + folderName + "'", ex);
+    }
+
+    return createdFolder;
+  }
+
+  private void createFoldersPath(String path) {
+    String[] pathFolders = path.split("/");
+
+    String currentParentFolderId = "root";
+    for(String pathFolderName : pathFolders) {
+      String foundFolderId = getFileId(currentParentFolderId, pathFolderName, true);
+
+      if (foundFolderId == null) {
+        File createdFolder = createFolder(currentParentFolderId, pathFolderName);
+        currentParentFolderId = createdFolder.getId();
+      } else {
+        currentParentFolderId = foundFolderId;
+      }
+    }
+  }
+
+  private String getLastFolderId(String path) {
+    String[] pathFolders = path.split("/");
+
+    String currentParentFolderId = "root";
+    for(String pathFolderName : pathFolders) {
+      String foundFolderId = getFileId(currentParentFolderId, pathFolderName, true);
+
+      if (foundFolderId == null) {
+        return null;
+      } else {
+        currentParentFolderId = foundFolderId;
+      }
+    }
+
+    return currentParentFolderId;
+  }
+
+  private File createFile(String fullPath, AbstractInputStreamContent uploadStreamContent) {
+    String foldersPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+
+    if (!isFoldersPathExists(foldersPath)) {
+      createFoldersPath(foldersPath);
+    }
+
+    File fileMetadata = new File();
+
+    String fileName = fullPath.substring(fullPath.lastIndexOf('/') + 1);
+    fileMetadata.setName(fileName);
+
+    String parentFolderId = getLastFolderId(foldersPath);
+    List<String> parents = Collections.singletonList(parentFolderId);
+    fileMetadata.setParents(parents);
+
+    File createdFile = null;
+
+    try {
+      createdFile = this.googleDiskAPI
+        .files()
+        .create(fileMetadata, uploadStreamContent)
+        .setFields("id, webContentLink, webViewLink, parents")
+        .execute();
+    } catch (IOException ex) {
+      throw new IllegalArgumentException("Can't create folder '" + fileName + "'", ex);
+    }
+
+    return createdFile;
+  }
+
+  public String uploadFile(String dstFilePath, InputStream inputStream) {
+    AbstractInputStreamContent uploadStreamContent = new InputStreamContent("text/csv", inputStream);
+    File createdFile = createFile(dstFilePath, uploadStreamContent);
+
+    return createdFile.getId();
+  }
+
+  private File findFileByPath(String path) {
     String[] filePathItems = path.split("/");
     String currentParentFolderId = "root";
     String foundFileId = null;
@@ -91,21 +209,44 @@ public class GoogleDiskService {
       boolean isFileName = i == filePathItems.length - 1;
       if (isFileName) {
         foundFileId = getFileId(currentParentFolderId, filePathItems[i], false);
+        break;
       } else {
         currentParentFolderId = getFileId(currentParentFolderId, filePathItems[i], true);
       }
     }
 
-    OutputStream outputStream = new ByteArrayOutputStream();
+    File foundFile = null;
     if (foundFileId != null) {
       try {
-        googleDiskAPI.files().get(foundFileId).executeMediaAndDownloadTo(outputStream);
-      } catch (Exception ex) {
-        throw new IllegalArgumentException("Can't get file by its id '" + foundFileId + "'", ex);
+        foundFile = this.googleDiskAPI
+          .files()
+          .get(foundFileId)
+          .execute();
+      } catch (IOException ex) {
+        throw new IllegalArgumentException("Can't get found file by its id", ex);
       }
     }
 
-    return outputStream;
+    return foundFile;
+  }
+
+  public ByteArrayOutputStream getFileOutputStream(String path) {
+    File foundFile = findFileByPath(path);
+
+    ByteArrayOutputStream baos = null;
+    if (foundFile != null) {
+      baos = new ByteArrayOutputStream();
+      try {
+        googleDiskAPI
+          .files()
+          .get(foundFile.getId())
+          .executeMediaAndDownloadTo(baos);
+      } catch (Exception ex) {
+        throw new IllegalArgumentException("Can't get file by its id '" + foundFile.getId() + "'", ex);
+      }
+    }
+
+    return baos;
   }
 
   private Drive getGoogleDiskAPI(String googleClientSecretFilePath, String googleCredentialsFolder) {
