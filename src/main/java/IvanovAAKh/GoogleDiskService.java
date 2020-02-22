@@ -30,7 +30,7 @@ public class GoogleDiskService {
   private static final List<String> SCOPES = Collections.singletonList(DriveScopes.DRIVE);
   private Drive googleDiskAPI;
 
-  GoogleDiskService(String googleClientSecretFilePath, String googleCredentialsFolder) {
+  public GoogleDiskService(String googleClientSecretFilePath, String googleCredentialsFolder) {
     this.googleDiskAPI = this.getGoogleDiskAPI(googleClientSecretFilePath, googleCredentialsFolder);
   }
 
