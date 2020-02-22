@@ -34,20 +34,6 @@ public class GoogleDiskService {
     this.googleDiskAPI = this.getGoogleDiskAPI(googleClientSecretFilePath, googleCredentialsFolder);
   }
 
-  public static void main(String ...args) {
-    GoogleDiskService googleDiskService = new GoogleDiskService(
-      "D:/projects/My/google_client_secret.json",
-      "D:/projects/My"
-      );
-
-    System.out.println(googleDiskService.getFileOutputStream("7 kurs/test_folder/test1.txt"));
-
-    ByteArrayOutputStream baos = googleDiskService.getFileOutputStream("7 kurs/test_folder/test1.txt");
-
-    InputStream inputStream = new ByteArrayInputStream(baos.toByteArray());
-    googleDiskService.uploadFile("myAutoCreatedFolder/1/2/test1.txt", inputStream);
-  }
-
   // Remember that in Google Disk folder - is also file
   private String getFileId(String parentFolderId, String fileName, boolean isFolder) {
     StringBuilder fileSearchQueryBuilder = new StringBuilder();
@@ -230,7 +216,7 @@ public class GoogleDiskService {
     return foundFile;
   }
 
-  public ByteArrayOutputStream getFileOutputStream(String path) {
+  public ByteArrayOutputStream downloadFile(String path) {
     File foundFile = findFileByPath(path);
 
     ByteArrayOutputStream baos = null;
@@ -253,8 +239,8 @@ public class GoogleDiskService {
     NetHttpTransport netHttpTransport;
     try {
       netHttpTransport = GoogleNetHttpTransport.newTrustedTransport();
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Can't get GoogleNetHttpTransport");
+    } catch (Exception ex) {
+      throw new IllegalArgumentException("Can't get GoogleNetHttpTransport", ex);
     }
 
     Credential credential = getCredentials(netHttpTransport, googleClientSecretFilePath, googleCredentialsFolder);
@@ -271,15 +257,15 @@ public class GoogleDiskService {
     InputStream clientSecretFileInputStream;
     try {
       clientSecretFileInputStream = new FileInputStream(clientSecretFile);
-    } catch (FileNotFoundException e) {
-      throw new IllegalArgumentException("Can't load clientSecretFile");
+    } catch (FileNotFoundException ex) {
+      throw new IllegalArgumentException("Can't load clientSecretFile", ex);
     }
 
     GoogleClientSecrets clientSecrets;
     try {
       clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(clientSecretFileInputStream));
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Can't get clientSecrets");
+    } catch (IOException ex) {
+      throw new IllegalArgumentException("Can't get clientSecrets", ex);
     }
 
     java.io.File clientCredentialsFolder = new java.io.File(googleCredentialsFolder);
@@ -291,16 +277,16 @@ public class GoogleDiskService {
         .setDataStoreFactory(new FileDataStoreFactory(clientCredentialsFolder))
         .setAccessType("offline")
         .build();
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Can't build GoogleAuthorizationCodeFlow");
+    } catch (IOException ex) {
+      throw new IllegalArgumentException("Can't build GoogleAuthorizationCodeFlow", ex);
     }
 
     Credential credential;
     try {
       credential = new AuthorizationCodeInstalledApp(googleAuthorizationCodeFlow, new LocalServerReceiver())
         .authorize("user");
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Can't authorize");
+    } catch (IOException ex) {
+      throw new IllegalArgumentException("Can't authorize", ex);
     }
 
     return credential;
