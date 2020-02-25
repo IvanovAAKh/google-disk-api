@@ -35,7 +35,7 @@ public class GoogleDiskService {
   }
 
   // Remember that in Google Disk folder - is also file
-  private String getFileId(String parentFolderId, String fileName, boolean isFolder) {
+  private String getFileId(String parentFolderId, String fileName, boolean isFolder) throws Exception {
     StringBuilder fileSearchQueryBuilder = new StringBuilder();
     fileSearchQueryBuilder.append("name = '").append(fileName).append("'");
     fileSearchQueryBuilder.append(" and '").append(parentFolderId).append("' in parents");
@@ -60,7 +60,7 @@ public class GoogleDiskService {
 
         List<File> foundFiles = result.getFiles();
         if (foundFiles.size() > 1) {
-          throw new IllegalArgumentException("Google Disk can't have duplicated name in folder");
+          throw new Exception("Google Disk can't have duplicated name in folder");
         }
 
         if (foundFiles.size() > 0) {
@@ -69,13 +69,13 @@ public class GoogleDiskService {
         pageToken = result.getNextPageToken();
       } while (pageToken != null && foundFileId == null);
     } catch (Exception ex) {
-      throw new IllegalArgumentException("Error on fetch files from Google Disk", ex);
+      throw new Exception("Error on fetch files from Google Disk", ex);
     }
 
     return foundFileId;
   }
 
-  private boolean isFoldersPathExists(String path) {
+  private boolean isFoldersPathExists(String path) throws Exception {
     String[] pathFolders = path.split("/");
 
     String currentParentFolderId = "root";
@@ -90,7 +90,7 @@ public class GoogleDiskService {
     return true;
   }
 
-  private File createFolder(String parentFolderId, String folderName) {
+  private File createFolder(String parentFolderId, String folderName) throws Exception {
     File fileMetadata = new File();
 
     fileMetadata.setName(folderName);
@@ -109,13 +109,13 @@ public class GoogleDiskService {
         .setFields("id, name")
         .execute();
     } catch (IOException ex) {
-      throw new IllegalArgumentException("Can't create folder '" + folderName + "'", ex);
+      throw new Exception("Can't create folder '" + folderName + "'", ex);
     }
 
     return createdFolder;
   }
 
-  private void createFoldersPath(String path) {
+  private void createFoldersPath(String path) throws Exception {
     String[] pathFolders = path.split("/");
 
     String currentParentFolderId = "root";
@@ -131,7 +131,7 @@ public class GoogleDiskService {
     }
   }
 
-  private String getLastFolderId(String path) {
+  private String getLastFolderId(String path) throws Exception {
     String[] pathFolders = path.split("/");
 
     String currentParentFolderId = "root";
@@ -148,7 +148,7 @@ public class GoogleDiskService {
     return currentParentFolderId;
   }
 
-  private File createFile(String fullPath, AbstractInputStreamContent uploadStreamContent) {
+  private File createFile(String fullPath, AbstractInputStreamContent uploadStreamContent) throws Exception {
     String foldersPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
 
     if (!isFoldersPathExists(foldersPath)) {
@@ -173,20 +173,20 @@ public class GoogleDiskService {
         .setFields("id, webContentLink, webViewLink, parents")
         .execute();
     } catch (IOException ex) {
-      throw new IllegalArgumentException("Can't create folder '" + fileName + "'", ex);
+      throw new Exception("Can't create folder '" + fileName + "'", ex);
     }
 
     return createdFile;
   }
 
-  public String uploadFile(String dstFilePath, InputStream inputStream) {
+  public String uploadFile(String dstFilePath, InputStream inputStream) throws Exception {
     AbstractInputStreamContent uploadStreamContent = new InputStreamContent("text/csv", inputStream);
     File createdFile = createFile(dstFilePath, uploadStreamContent);
 
     return createdFile.getId();
   }
 
-  private File findFileByPath(String path) {
+  private File findFileByPath(String path) throws Exception {
     String[] filePathItems = path.split("/");
     String currentParentFolderId = "root";
     String foundFileId = null;
@@ -216,7 +216,7 @@ public class GoogleDiskService {
     return foundFile;
   }
 
-  public ByteArrayOutputStream downloadFile(String path) {
+  public ByteArrayOutputStream downloadFile(String path) throws Exception {
     File foundFile = findFileByPath(path);
 
     ByteArrayOutputStream baos = null;
@@ -228,7 +228,7 @@ public class GoogleDiskService {
           .get(foundFile.getId())
           .executeMediaAndDownloadTo(baos);
       } catch (Exception ex) {
-        throw new IllegalArgumentException("Can't get file by its id '" + foundFile.getId() + "'", ex);
+        throw new Exception("Can't get file by its id '" + foundFile.getId() + "'", ex);
       }
     }
 
@@ -240,7 +240,7 @@ public class GoogleDiskService {
     try {
       netHttpTransport = GoogleNetHttpTransport.newTrustedTransport();
     } catch (Exception ex) {
-      throw new IllegalArgumentException("Can't get GoogleNetHttpTransport", ex);
+      throw new RuntimeException("Can't get GoogleNetHttpTransport", ex);
     }
 
     Credential credential = getCredentials(netHttpTransport, googleClientSecretFilePath, googleCredentialsFolder);
@@ -258,14 +258,14 @@ public class GoogleDiskService {
     try {
       clientSecretFileInputStream = new FileInputStream(clientSecretFile);
     } catch (FileNotFoundException ex) {
-      throw new IllegalArgumentException("Can't load clientSecretFile", ex);
+      throw new RuntimeException("Can't load clientSecretFile", ex);
     }
 
     GoogleClientSecrets clientSecrets;
     try {
       clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(clientSecretFileInputStream));
     } catch (IOException ex) {
-      throw new IllegalArgumentException("Can't get clientSecrets", ex);
+      throw new RuntimeException("Can't get clientSecrets", ex);
     }
 
     java.io.File clientCredentialsFolder = new java.io.File(googleCredentialsFolder);
@@ -278,7 +278,7 @@ public class GoogleDiskService {
         .setAccessType("offline")
         .build();
     } catch (IOException ex) {
-      throw new IllegalArgumentException("Can't build GoogleAuthorizationCodeFlow", ex);
+      throw new RuntimeException("Can't build GoogleAuthorizationCodeFlow", ex);
     }
 
     Credential credential;
@@ -286,7 +286,7 @@ public class GoogleDiskService {
       credential = new AuthorizationCodeInstalledApp(googleAuthorizationCodeFlow, new LocalServerReceiver())
         .authorize("user");
     } catch (IOException ex) {
-      throw new IllegalArgumentException("Can't authorize", ex);
+      throw new RuntimeException("Can't authorize", ex);
     }
 
     return credential;
