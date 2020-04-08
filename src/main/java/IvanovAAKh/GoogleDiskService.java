@@ -270,6 +270,18 @@ public class GoogleDiskService {
     return fileNames;
   }
 
+  public void deleteFile(String path) throws Exception {
+    File file = findFileByPath(path);
+    if (file == null) {
+      throw new RuntimeException("File '" + path + "' does not exists");
+    }
+    try {
+      googleDiskAPI.files().delete(file.getId()).execute();
+    } catch (IOException e) {
+      throw new RuntimeException("Error delete file: '" + path + "'", e);
+    }
+  }
+
   private Drive getGoogleDiskAPI(String googleClientSecretFilePath, String googleCredentialsFolder) {
     NetHttpTransport netHttpTransport;
     try {
