@@ -18,8 +18,7 @@ import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
 
 import java.io.*;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 // example took from: https://o7planning.org/en/11889/manipulating-files-and-folders-on-google-drive-using-java
 public class GoogleDiskService {
@@ -101,7 +100,7 @@ public class GoogleDiskService {
       fileMetadata.setParents(parents);
     }
 
-    File createdFolder = null;
+    File createdFolder;
     try {
       createdFolder = this.googleDiskAPI
         .files()
@@ -164,7 +163,7 @@ public class GoogleDiskService {
     List<String> parents = Collections.singletonList(parentFolderId);
     fileMetadata.setParents(parents);
 
-    File createdFile = null;
+    File createdFile;
 
     try {
       createdFile = this.googleDiskAPI
@@ -233,6 +232,42 @@ public class GoogleDiskService {
     }
 
     return baos;
+  }
+
+  public Set<String> getFileNamesInFolder(String folderPath) throws Exception {
+    String folderId = getLastFolderId(folderPath);
+    if (folderId == null) {
+      throw new RuntimeException("Folder '" + folderPath + "' does not exists");
+    }
+    StringBuilder fileSearchQueryBuilder = new StringBuilder();
+    fileSearchQueryBuilder.append("'").append(folderId).append("' in parents");
+    fileSearchQueryBuilder.append(" and mimeType != 'application/vnd.google-apps.folder'");
+
+    Set<String> fileNames = new HashSet<>();
+    String pageToken = null;
+    try {
+      do {
+        FileList result = this.googleDiskAPI
+          .files()
+          .list()
+          .setQ(fileSearchQueryBuilder.toString())
+          .setSpaces("drive")
+          .setFields("nextPageToken, files(id, name)")
+          .setPageToken(pageToken)
+          .execute();
+
+        List<File> foundFiles = result.getFiles();
+        for (File foundFile : foundFiles) {
+          fileNames.add(foundFile.getName());
+        }
+
+        pageToken = result.getNextPageToken();
+      } while (pageToken != null);
+    } catch (Exception ex) {
+      throw new Exception("Error on fetch files from Google Disk", ex);
+    }
+
+    return fileNames;
   }
 
   private Drive getGoogleDiskAPI(String googleClientSecretFilePath, String googleCredentialsFolder) {
