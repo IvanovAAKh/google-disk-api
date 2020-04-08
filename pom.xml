@@ -6,7 +6,7 @@
 
     <groupId>IvanovAAKh</groupId>
     <artifactId>google-disk-api</artifactId>
-    <version>1.7</version>
+    <version>1.8</version>
 
     <name>google-disk-api</name>
     <description>Util that allow to work with google disk</description>
