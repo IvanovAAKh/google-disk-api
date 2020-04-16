@@ -242,6 +242,7 @@ public class GoogleDiskService {
     StringBuilder fileSearchQueryBuilder = new StringBuilder();
     fileSearchQueryBuilder.append("'").append(folderId).append("' in parents");
     fileSearchQueryBuilder.append(" and mimeType != 'application/vnd.google-apps.folder'");
+    fileSearchQueryBuilder.append(" and trashed = false");
 
     Set<String> fileNames = new HashSet<>();
     String pageToken = null;
